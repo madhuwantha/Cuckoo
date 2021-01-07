@@ -1,6 +1,12 @@
 from HashTab import HashTab
 from Shell import Shell
+import csv
+from network_scan import NetworkData
+import ipaddress
+from os import path
+import subprocess
 import time
+
 
 
 def test():
@@ -42,15 +48,116 @@ def test():
     print("There were", found, "records not deleted from Cuckoo")
 
 
+def packet_anlyze():
+    network_data  = NetworkData()   
+    ip_adresses, mac_addresses = network_data.get_network_data()
+
+    print(ip_adresses)
+    print(mac_addresses)
+    
+    if(not(path.exists('allowed.csv'))):
+        subprocess.run(['touch','allowed.csv'], stdout=subprocess.PIPE)
+
+    allowed_macs = []
+    allowed_destinations = []
+
+    new_macs = []
+    new_destinations = []
+    
+    try:
+        csv_file = open('allowed.csv', mode='r')
+        csv_reader = csv.DictReader(csv_file, fieldnames=['mac', 'dst_ip'])
+            
+        for row in csv_reader:
+            allowed_macs.append(row['mac'])
+            allowed_destinations.append(row['dst_ip'])
+            #print(row['src_ip'] + " " + row['src_port'] + " " + row['dst_ip'] + " " + row['dst_port'])
+            #line_count += 1
+
+        csv_file.close()
+
+        csv_file = open('allowed.csv', mode='a')
+        csv_writer = csv.writer(csv_file, delimiter=',', lineterminator='\n')
+
+        size = 1000
+        missing = 0
+        found = 0
+        inserted = 0
+        c = HashTab(100)
+        ip_routes = []
+
+        for index, mac in enumerate(mac_addresses):
+            
+            if mac[1] not in allowed_macs:
+                new_dest = input("Please enter the allowed destination ip for device "+str(mac[1])+" : ")
+                allowed_macs.append(mac)
+                allowed_destinations.append(new_dest)
+                new_macs.append(mac)
+                new_destinations.append(new_dest)
+            
+            ip_route_forward = ip_adresses[index] + " " + allowed_destinations[allowed_macs.index(mac[1])]
+            ip_route_backward = allowed_destinations[allowed_macs.index(mac[1])] + " " + ip_adresses[index]  
+            ip_routes.append(ip_route_forward)
+            ip_routes.append(ip_route_backward)
+
+            if c.insert(ip_route_forward, index):
+                inserted += 1
+            
+            if c.insert(ip_route_backward, index):
+                inserted += 1
+                
+            print("There were", inserted, "allowed routes successfully inserted")
+
+
+
+        
+
+        for index, mac in enumerate(new_macs):
+            #ip_route = mac[1] + " " + new_destinations[index]
+            #print(ip_route)
+            csv_writer.writerow([mac[1] , new_destinations[index]])
+        
+        csv_file.close()
+
+
+        pcap_path = input("Please enter relative file path to pcap : ")
+        
+        shell = Shell()
+        shell.execute("echo \"1996\" |  sudo -S tshark -r " + str(pcap_path) + " -T fields -E separator=, -E quote=d -e _ws.col.No. -e _ws.col.Time -e _ws.col.Source -e _ws.col.SourcePort -e _ws.col.Destination -e _ws.col.DestinationPort -e _ws.col.Protocol -e _ws.col.Length -e _ws.col.Info > data.csv")
+
+        csv_file = open('data.csv', mode='r')
+        csv_reader = csv.DictReader(csv_file, fieldnames=['number', 'time', 'src_ip', 'src_port', 'dst_ip', 'dst_port', 'proto', 'length', 'info'])
+
+        anomalies = []
+
+        for row in csv_reader:
+            route = row['src_ip'] + " " + row['dst_ip']
+            route_obtained = c.find(route)
+            
+            if route_obtained == None or route_obtained != route:
+                anomalies.append(row)
+                found += 1
+
+        csv_file.close()
+
+        print(anomalies)
+
+        
+
+
+
+
+    except IOError:
+        print("I/O error")
+
 def __main():
-    print("Starting the code")
+
     shell = Shell()
-    shell.execute("echo \"1234\" |  sudo -S timout 100 tcpdump -w output.pcap")
-    print("Please check the pcap file")
-    print("------------------------------------------")
-
-    # test()
-
+    while(True):
+        shell.execute("echo 123")
+        time.sleep(1)
+        shell.execute("echo 1234")
+        time.sleep(5)
 
 if __name__ == '__main__':
     __main()
