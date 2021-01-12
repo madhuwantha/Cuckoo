@@ -6,6 +6,7 @@ import ipaddress
 from os import path
 import subprocess
 import time
+import sys
 
 
 
@@ -88,15 +89,18 @@ def packet_anlyze():
 
         for index, mac in enumerate(mac_addresses):
             
-            if mac[1] not in allowed_macs:
-                new_dest = input("Please enter the allowed destination ip for device "+str(mac[1])+" : ")
+            if mac not in allowed_macs:
+                new_dest = input("Please enter the allowed destination ip for device "+str(mac)+" : ")
                 allowed_macs.append(mac)
                 allowed_destinations.append(new_dest)
                 new_macs.append(mac)
                 new_destinations.append(new_dest)
             
-            ip_route_forward = ip_adresses[index] + " " + allowed_destinations[allowed_macs.index(mac[1])]
-            ip_route_backward = allowed_destinations[allowed_macs.index(mac[1])] + " " + ip_adresses[index]  
+            ip_route_forward = ip_adresses[index] + " " + allowed_destinations[allowed_macs.index(mac)]
+            #print("****"+ ip_adresses[index] + " == " + str(allowed_macs.index(mac)))
+            ip_route_backward = allowed_destinations[allowed_macs.index(mac)] + " " + ip_adresses[index] 
+            print("**" + ip_route_forward)
+            print("**" + ip_route_backward) 
             ip_routes.append(ip_route_forward)
             ip_routes.append(ip_route_backward)
 
@@ -109,13 +113,12 @@ def packet_anlyze():
             print("There were", inserted, "allowed routes successfully inserted")
 
 
-
         
 
         for index, mac in enumerate(new_macs):
             #ip_route = mac[1] + " " + new_destinations[index]
             #print(ip_route)
-            csv_writer.writerow([mac[1] , new_destinations[index]])
+            csv_writer.writerow([mac , new_destinations[index]])
         
         csv_file.close()
 
@@ -126,12 +129,13 @@ def packet_anlyze():
         shell.execute("echo \"1996\" |  sudo -S tshark -r " + str(pcap_path) + " -T fields -E separator=, -E quote=d -e _ws.col.No. -e _ws.col.Time -e _ws.col.Source -e _ws.col.SourcePort -e _ws.col.Destination -e _ws.col.DestinationPort -e _ws.col.Protocol -e _ws.col.Length -e _ws.col.Info > data.csv")
 
         csv_file = open('data.csv', mode='r')
-        csv_reader = csv.DictReader(csv_file, fieldnames=['number', 'time', 'src_ip', 'src_port', 'dst_ip', 'dst_port', 'proto', 'length', 'info'])
+        csv_reader = csv.DictReader(csv_file, fieldnames=['number','time','src_ip','src_port','dst_ip','dst_port','proto','length', 'info', 'src_mac'])
 
         anomalies = []
 
         for row in csv_reader:
             route = row['src_ip'] + " " + row['dst_ip']
+            print(row.values)
             route_obtained = c.find(route)
             
             if route_obtained == None or route_obtained != route:
@@ -140,7 +144,8 @@ def packet_anlyze():
 
         csv_file.close()
 
-        print(anomalies)
+        #print(len(anomalies))
+        print(*anomalies, sep='\n')
 
         
 
@@ -153,10 +158,17 @@ def packet_anlyze():
 def __main():
 
     shell = Shell()
+    #net_data = NetworkData()
+
+    #ip = net_data.get_host_ip()
+    #net = ipaddress.ip_network(ip, strict=False)
+    #shell.execute("sudo tcpdump -i any -v net " + str(net))
+    #time.sleep(1000)
+    #sys.exit()
     while(True):
-        shell.execute("echo 123")
+        shell.execute("")
         time.sleep(1)
-        shell.execute("echo 1234")
+        packet_anlyze()
         time.sleep(5)
 
 if __name__ == '__main__':
