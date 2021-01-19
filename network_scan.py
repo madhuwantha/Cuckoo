@@ -1,9 +1,12 @@
 import re
 import subprocess
 import ipaddress
+from Device import Device
 
 
 class NetworkData(object):
+
+    
 
     def get_host_ip(self):
         p1 = subprocess.Popen(['ip', 'addr'], stdout=subprocess.PIPE)
@@ -25,5 +28,11 @@ class NetworkData(object):
         ip_adresses = re.findall( r'[0-9]+(?:\.[0-9]+){3}', data )
         mac_address = re.findall( r'(?:[0-9a-fA-F]:?){12}', data )
 
-        return ip_adresses, mac_address
+        net_data = []
+
+        for i in range(len(mac_address)):
+            device = Device(mac_address[i], ip_adresses[i], 'dev'+str(i))
+            net_data.append(device)
+        
+        return net_data
  

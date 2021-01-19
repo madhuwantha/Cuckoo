@@ -7,8 +7,16 @@ from os import path
 import subprocess
 import time
 import sys
+import threading
+import os
+import pandas as pd
+import queue
+from watchdog.observers import Observer
+from watchdog.events import FileSystemEventHandler
+import OnMyWatch
+import pyshark
 
-
+q = queue.Queue()
 
 def test():
     size = 1000
@@ -48,128 +56,101 @@ def test():
             found += 1
     print("There were", found, "records not deleted from Cuckoo")
 
+def collecting_traffic(name):
+    print(str(name)+ ' Thread starts')
+    shell = Shell()
+    net_data = NetworkData()
 
-def packet_anlyze():
-    network_data  = NetworkData()   
-    ip_adresses, mac_addresses = network_data.get_network_data()
+    ip = net_data.get_host_ip()
+    net = ipaddress.ip_network(ip, strict=False)
+    shell.execute("echo \"1996\" | sudo -S tcpdump -i any -v -G 60 net " + str(net) + " -w data-%S.pcap")
 
-    print(ip_adresses)
-    print(mac_addresses)
+def create_profiles(name):
+    print(str(name)+ ' Thread starts')
+    if(not(path.exists('devices.csv'))):
+        network_data = NetworkData()
+        current_devices = network_data.get_network_data()
+        devices_dict = {
+            'name' : [],
+            'mac' : [],
+            'internal_ip' : []
+        }
+
+        for i in range(len(current_devices)):
+            if(not(path.exists(current_devices[i].name))):
+                open(current_devices[i].name+'.csv', 'a').close()
+
+            devices_dict['name'].append(current_devices[i].name)
+            devices_dict['mac'].append(current_devices[i].mac)
+            devices_dict['internal_ip'].append(current_devices[i].ip)
+
     
-    if(not(path.exists('allowed.csv'))):
-        subprocess.run(['touch','allowed.csv'], stdout=subprocess.PIPE)
-
-    allowed_macs = []
-    allowed_destinations = []
-
-    new_macs = []
-    new_destinations = []
-    
-    try:
-        csv_file = open('allowed.csv', mode='r')
-        csv_reader = csv.DictReader(csv_file, fieldnames=['mac', 'dst_ip'])
-            
-        for row in csv_reader:
-            allowed_macs.append(row['mac'])
-            allowed_destinations.append(row['dst_ip'])
-            #print(row['src_ip'] + " " + row['src_port'] + " " + row['dst_ip'] + " " + row['dst_port'])
-            #line_count += 1
-
-        csv_file.close()
-
-        csv_file = open('allowed.csv', mode='a')
-        csv_writer = csv.writer(csv_file, delimiter=',', lineterminator='\n')
-
-        size = 1000
-        missing = 0
-        found = 0
-        inserted = 0
-        c = HashTab(100)
-        ip_routes = []
-
-        for index, mac in enumerate(mac_addresses):
-            
-            if mac not in allowed_macs:
-                new_dest = input("Please enter the allowed destination ip for device "+str(mac)+" : ")
-                allowed_macs.append(mac)
-                allowed_destinations.append(new_dest)
-                new_macs.append(mac)
-                new_destinations.append(new_dest)
-            
-            ip_route_forward = ip_adresses[index] + " " + allowed_destinations[allowed_macs.index(mac)]
-            #print("****"+ ip_adresses[index] + " == " + str(allowed_macs.index(mac)))
-            ip_route_backward = allowed_destinations[allowed_macs.index(mac)] + " " + ip_adresses[index] 
-            print("**" + ip_route_forward)
-            print("**" + ip_route_backward) 
-            ip_routes.append(ip_route_forward)
-            ip_routes.append(ip_route_backward)
-
-            if c.insert(ip_route_forward, index):
-                inserted += 1
-            
-            if c.insert(ip_route_backward, index):
-                inserted += 1
-                
-            print("There were", inserted, "allowed routes successfully inserted")
-
-
         
-
-        for index, mac in enumerate(new_macs):
-            #ip_route = mac[1] + " " + new_destinations[index]
-            #print(ip_route)
-            csv_writer.writerow([mac , new_destinations[index]])
-        
-        csv_file.close()
-
-
-        pcap_path = input("Please enter relative file path to pcap : ")
-        
-        shell = Shell()
-        shell.execute("echo \"1996\" |  sudo -S tshark -r " + str(pcap_path) + " -T fields -E separator=, -E quote=d -e _ws.col.No. -e _ws.col.Time -e _ws.col.Source -e _ws.col.SourcePort -e _ws.col.Destination -e _ws.col.DestinationPort -e _ws.col.Protocol -e _ws.col.Length -e _ws.col.Info > data.csv")
-
-        csv_file = open('data.csv', mode='r')
-        csv_reader = csv.DictReader(csv_file, fieldnames=['number','time','src_ip','src_port','dst_ip','dst_port','proto','length', 'info', 'src_mac'])
-
-        anomalies = []
-
-        for row in csv_reader:
-            route = row['src_ip'] + " " + row['dst_ip']
-            print(row.values)
-            route_obtained = c.find(route)
-            
-            if route_obtained == None or route_obtained != route:
-                anomalies.append(row)
-                found += 1
-
-        csv_file.close()
-
-        #print(len(anomalies))
-        print(*anomalies, sep='\n')
-
-        
-
-
-
-
-    except IOError:
-        print("I/O error")
+        df = pd.DataFrame(devices_dict)
+        df.to_csv('devices.csv', index=False)
 
 def __main():
 
-    shell = Shell()
-    #net_data = NetworkData()
+    thread1 = threading.Thread(target=collecting_traffic,args=('t1', ))
+    thread1.start()
+    thread2 = threading.Thread(target=create_profiles,args=('t2', ))
+    thread2.start()
 
-    #ip = net_data.get_host_ip()
-    #net = ipaddress.ip_network(ip, strict=False)
-    #shell.execute("sudo tcpdump -i any -v net " + str(net))
-    #time.sleep(1000)
-    #sys.exit()
-    while(True):
-        shell.execute("")
-        time.sleep(1)
-        packet_anlyze()
-        time.sleep(5)
+    dfQueue = queue.Queue()
+
+    watch = OnMyWatch.OnMyWatch()
+    watch.run(dfQueue)
+
+    c = HashTab(100)
+    i = 0
+    while( True ):
+        if(dfQueue.qsize() > 0):
+            if(path.exists('devices.csv')):
+                traffic_frame = dfQueue.get()
+                devices_frame = pd.read_csv('devices.csv')
+
+                for index,row in devices_frame.iterrows():
+                    try:
+                        routes_frame = traffic_frame.loc[(traffic_frame.src_ip == row[2]) & (traffic_frame.protocol != 'ARP')]
+                        profile_frame = routes_frame.groupby(['dst_ip', 'dst_port', 'protocol']).length.agg(['count', 'mean'])
+
+                        #for index1,row1 in profile_frame.iterrows():
+                            #route_forward = str(row[2]) + str(row1['dst_ip']) + str(row1['dst_port']) + 'OUT'
+                        
+                        profile_file = row['name']+".csv"
+                        profile_frame.to_csv(profile_file)
+                    except:
+                        print(row[2])
+
+            break
+        
+        else:
+            i = i + 1 
+            print(i)
+    
+    print("Profiling complete")
+        
+
+    
+    #thread3 = threading.Thread(target=read_traffic,args=('t3', ))
+    #thread3.start()
+    #if(q.qsize() > 0 ):
+    #    print(q.get())
+    #path = os.path.abspath('data1.pcap')
+    #cap = pyshark.FileCapture('data1.pcap')
+    #print(cap[10])
+     
+
+
+    #thread2 = threading.Thread(target=read_traffic,args=('t2', ))
+    #thread2.start() 
+    #shell = Shell()
+    #os.rename(file, 'data1.pcap')
+    #output = file[:-5] + '.csv'
+    #file = 'data-18.pcap'
+    #shell.execute("echo \"1996\" |  sudo -S tshark -r " + file +" -T fields -E separator=, -E quote=d -e _ws.col.No. -e _ws.col.Time -e _ws.col.Source -e _ws.col.SourcePort -e _ws.col.Destination -e _ws.col.DestinationPort -e _ws.col.Protocol -e _ws.col.Length -e _ws.col.Info > traffic.csv")
+
+
 
 if __name__ == '__main__':
     __main()
