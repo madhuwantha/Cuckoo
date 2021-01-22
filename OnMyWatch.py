@@ -23,7 +23,8 @@ class OnMyWatch:
         self.observer.start() 
         try: 
             while True: 
-                time.sleep(5) 
+                time.sleep(5)
+
         except: 
             self.observer.stop() 
             print("Observer Stopped") 
@@ -47,6 +48,7 @@ class Handler(FileSystemEventHandler):
 
             if('data' in str(event.src_path)):
                 self.queue.put(str(event.src_path)[2:])
+                print(self.queue.qsize())
             if(self.queue.qsize() > 1):
                 file = self.queue.get()
                 csv_file_name = 'traffic'+file[5:-5]+'.csv'
@@ -60,14 +62,15 @@ class Handler(FileSystemEventHandler):
             
                 for row in csv_reader:
                     packet = {
-                       'time' :  row['time'],
-                       'src_ip' : row['src_ip'],
-                       'src_port' : row['src_port'],
-                       'dst_ip' : row['dst_ip'],
-                       'dst_port' : row['dst_port'],
-                       'protocol' : row['protocol'],
-                       'length' : int(row['length']),
-                       'info' : row['info']
+                    'time' :  row['time'],
+                    'src_ip' : {True : row['src_ip'], False: '0.0.0.0' } [row['src_ip'] != ''],
+                    'src_port' : {True : row['src_port'], False: '0' } [row['src_port'] != ''],
+                    'dst_ip' : {True : row['dst_ip'], False: '0.0.0.0' } [row['dst_ip'] != ''],
+                    'dst_port' : {True : row['dst_port'], False: '0' } [row['dst_port'] != ''],
+                    'protocol' : row['protocol'],
+                    'length' : int(row['length']),
+                    'info' : row['info'],
+                    'dir' : 'NA'
                     }
 
                     packets.append(packet)
