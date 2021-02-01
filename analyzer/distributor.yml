@@ -1,0 +1,20 @@
+- hosts: all
+
+  vars:
+    LOCAL_PROJECT_HOME: "../collector"
+    PROJECT_HOME: "~/collector"
+    MAIN_PY: "collector.py"
+
+  tasks:
+
+  - name: Create remote directory
+    file: path={{PROJECT_HOME}} state=directory
+
+  - name: Copy project code to website server
+    copy: src={{item}} dest={{PROJECT_HOME}}
+    with_fileglob:
+     - "{{LOCAL_PROJECT_HOME}}/*"
+
+  - name: Go to the folder and execute command
+    command: chdir=/home/fyp/collector python3 collector.py
+    sudo: yes

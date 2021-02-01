@@ -50,11 +50,11 @@ class Handler(FileSystemEventHandler):
                 file = self.queue.get()
                 csv_file_name = socket.gethostname()+'traffic'+file[5:-5]+'.csv'
 
-                self.shell.execute("echo \"1996\" |  sudo -S tshark -r " + file + " -T fields -E separator=, -E quote=d -e _ws.col.No. -e _ws.col.Time -e _ws.col.Source -e _ws.col.SourcePort -e _ws.col.Destination -e _ws.col.DestinationPort -e _ws.col.Protocol -e _ws.col.Length -e _ws.col.Info > " + csv_file_name)
+                self.shell.execute("echo \"1234\" |  sudo -S tshark -r " + file + " -T fields -E separator=, -E quote=d -e _ws.col.No. -e _ws.col.Time -e _ws.col.Source -e tcp.srcport -e _ws.col.Destination -e tcp.dstport -e _ws.col.Protocol -e _ws.col.Length -e _ws.col.Info > " + csv_file_name)
 
                 try:
-                    var_password  = "1234"
-                    var_command = "scp -o StrictHostKeychecking=no " + csv_file_name + " fyp@192.168.8.103:/home/fyp/"
+                    var_password  = "1996"
+                    var_command = "scp -o StrictHostKeychecking=no " + csv_file_name + " tharindu@192.168.8.101:/home/tharindu/Python/Cuckoo/analyzer"
         
                     var_child = pexpect.spawn(var_command)
                     i = var_child.expect(["password:", pexpect.EOF])
@@ -63,9 +63,14 @@ class Handler(FileSystemEventHandler):
                     if i==0: # send password                
                         var_child.sendline(var_password)
                         var_child.expect(pexpect.EOF)
+
+                        os.remove(file)
+                        os.remove(csv_file_name)
                     elif i==1: 
                         print("Got the key or connection timeout")
                         pass
+
+                    
 
                 except Exception as e:
                     print("Oops Something went wrong buddy")
