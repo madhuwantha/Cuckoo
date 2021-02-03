@@ -16,6 +16,7 @@ q = queue.Queue()
 c = HashTab(100)
 has_profiles = False
 times = 0
+writeHeader = True
 
 class Handler(FileSystemEventHandler):
 
@@ -45,9 +46,8 @@ def profile(filename):
         profiled = False
         traffic_frame = pd.DataFrame(read_traffic(filename))
 
-        if(os.path.exists('devices.csv')):
+        if(os.path.exists('devices.csv') and not(traffic_frame.empty)):
             devices_frame = pd.read_csv('devices.csv')
-                
                 
             for index,row in devices_frame.iterrows():
                 routes_frame = traffic_frame.loc[(traffic_frame.src_ip == row[2]) | (traffic_frame.dst_ip == row[2])]
@@ -85,10 +85,11 @@ def filter_anomalies(filename):
     anomalies = []
     allowes = []
     i = 0
+    global writeHeader
    
     traffic_frame2 = pd.DataFrame(read_traffic(filename))
 
-    if(os.path.exists('devices.csv')):
+    if(os.path.exists('devices.csv') and not(traffic_frame2.empty)):
         devices_frame2 = pd.read_csv('devices.csv')   
                 
         for index,row in traffic_frame2.iterrows():
@@ -117,10 +118,14 @@ def filter_anomalies(filename):
         print(i)
     
     anomaly_df = pd.DataFrame(anomalies)
-    anomaly_df.to_csv('anomalies.csv', index=False)
-
     allowes_df = pd.DataFrame(allowes)
-    allowes_df.to_csv('allowes.csv', index=False)
+    
+    if (writeHeader):
+        anomaly_df.to_csv('anomalies.csv', index=False, mode='a',  header=True)
+        allowes_df.to_csv('allowes.csv', index=False, mode='a',  header=True)
+    else:
+        anomaly_df.to_csv('anomalies.csv', index=False, mode='a',  header=False)
+        allowes_df.to_csv('allowes.csv', index=False, mode='a',  header=False)
 
 
 def create_profiles(name):
@@ -165,7 +170,7 @@ def read_traffic(filename):
         csv_reader = csv.DictReader(csv_file, fieldnames=['no','time', 'src_ip', 'src_port', 'dst_ip', 'dst_port', 'protocol', 'length', 'info'])
             
         for row in csv_reader:
-            if( row['time'] != '' ):
+            if( row['time'] != '' and row['time'] != None and row['src_ip'].split('.')[3] != str(2) and row['dst_ip'].split('.')[3] != str(2) ):
                 packet = {
                 'time' :  row['time'],
                 'src_ip' : {True : row['src_ip'], False: '0.0.0.0' } [row['src_ip'] != ''],
@@ -191,6 +196,7 @@ def __main():
     thread1.start()
 
     file_queue = queue.Queue()
+    global writeHeader
 
     event_handler = Handler(file_queue)
     observer = Observer()
@@ -205,6 +211,7 @@ def __main():
             
             if file_queue.qsize() > 0:
                 filter_anomalies(file_queue.get())
+                writeHeader = False
             time.sleep(5)
 
     except KeyboardInterrupt: 
